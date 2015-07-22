@@ -21,32 +21,46 @@ describe('Express Integration', function () {
     var routeCalled = 0
     var errorCalled = 0
 
-    form.append('avatar', util.file('small1.dat'))
+    form.append('avatar', util.file('large.jpg'))
 
     app.post('/profile', upload.single('avatar'), function (req, res, next) {
       routeCalled++
-      res.status(200).end('')
+      res.status(200).end('SUCCESS')
     })
 
     app.use(function (err, req, res, next) {
       assert.equal(err.code, 'LIMIT_FILE_SIZE')
 
       errorCalled++
-      res.status(500).end('')
+      res.status(500).end('ERROR')
     })
 
     app.listen(port, function () {
-      form.submit('http://localhost:' + port + '/profile', function (err, res) {
-        assert.ifError(err)
+      var res, body
+      var req = form.submit('http://localhost:' + port + '/profile')
+      var pending = 2
 
-        res.pipe(concat({ encoding: 'buffer' }, function (body) {
-          assert.equal(routeCalled, 0)
-          assert.equal(errorCalled, 1)
-          assert.equal(body.length, 0)
-          assert.equal(res.statusCode, 500)
+      function validate () {
+        assert.equal(routeCalled, 0)
+        assert.equal(errorCalled, 1)
+        assert.equal(body.toString(), 'ERROR')
+        assert.equal(res.statusCode, 500)
 
-          done()
+        done()
+      }
+
+      req.on('response', function (_res) {
+        res = _res
+
+        res.pipe(concat({ encoding: 'buffer' }, function (_body) {
+          body = _body
+
+          if (--pending === 0) validate()
         }))
+      })
+
+      req.on('finish', function () {
+        if (--pending === 0) validate()
       })
     })
   })
